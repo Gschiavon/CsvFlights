@@ -1,5 +1,6 @@
 package com.stratio.flight
 
+import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
 
 /**
@@ -12,14 +13,9 @@ class ErrorsOrHealthyFlights(rdd: RDD[String]){
     rdd.filter(!_.contains(header)).map(linea=> Flight.analizarLista(linea, linea.split(",")))
   }
 
-  def wrongFlight: RDD[(String, String)]= {
+  def wrongFlight: RDD[(String, String)]= toParsedFlight.filter(_.isLeft).flatMap(_.left.get)
 
-    toParsedFlight.filter(_.isLeft).flatMap(_.left.get)
-  }
-
-  def correctFlight: RDD[Flight]= {
-    toParsedFlight.filter(_.isRight).map(_.right.get).map(lineCorrect => Flight.apply(lineCorrect.split(",")))
-  }
+  def correctFlight: RDD[Flight]= toParsedFlight.filter(_.isRight).map(_.right.get).map(lineCorrect => Flight.apply(lineCorrect.split(",")))
 }
 class FlightOperation(rdd: RDD[Flight])
 {
@@ -41,6 +37,14 @@ class FlightOperation(rdd: RDD[Flight])
   def meanDistanceWithGroupByKey: Double = {
     val result4= rdd.map(flight => (1, flight.Distance.toInt)).groupByKey.mapValues(Distance => Distance.toList.reduce(_ + _).toDouble / Distance.toList.size)//.map(mediaByInt=> mediaByInt._2)
     result4.reduce((a,b)=> b)._2
+  }
+
+  def monthMinPriceByAirportWithBroadcast(implicit broadcastFuelPrice: Broadcast[Map[(String, String), Int]]): RDD[(String, (String, Int))]= {
+
+    val distanceByYearMothAirport = rdd.map(flight => ((flight.dates.Year, flight.dates.Month, flight.Origin), flight.Distance.toInt)).reduceByKey(_ + _)
+    val airportDistanceByYearMonth = distanceByYearMothAirport.map(dxairport => ((dxairport._1._1, dxairport._1._2), (dxairport._1._3, dxairport._2)))
+
+    airportDistanceByYearMonth.map(a => ((a._2._1), (a._1._2, a._2._2.toInt * broadcastFuelPrice.value(a._1)))).reduceByKey((a, b) => if (a._2 < b._2) a else b)
   }
 
 }
