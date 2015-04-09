@@ -1,12 +1,8 @@
 package com.stratio
 
-
 import org.apache.spark.SparkContext
 import com.stratio.flight.FlightDsl._
 
-/**
- * Created by pmadrigal on 7/04/15.
- */
 package object flight {
 
   var sc = new SparkContext("local", "exampleApp")
@@ -18,6 +14,7 @@ package object flight {
     val broadcastFuelPrice= sc.broadcast(PricefuelByYearMonth)
 
     val csvHealthy = csv.correctFlight
+    csvHealthy.meanDistance
     csvHealthy.monthMinPriceByAirportWithBroadcast(broadcastFuelPrice).collect.foreach(println)
   }
 }
